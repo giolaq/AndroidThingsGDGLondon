@@ -4,6 +4,8 @@ import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
+import com.google.android.things.pio.I2cDevice
+import com.google.android.things.pio.PeripheralManagerService
 import java.io.IOException
 
 /**
@@ -28,35 +30,37 @@ import java.io.IOException
  */
 class MainActivity : Activity() {
 
-    private lateinit var led: Led
-    private val ledHandler = Handler()
+    private lateinit var service: PeripheralManagerService
+    private lateinit var i2cDevice: I2cDevice
+
+    private val I2C_ADDRESS: String = "I2C1"
+    private val TC74_TEMPERATURE_SENSOR_SLAVE = 0x4a
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        led = Led("GPIO2_IO02")
-        ledHandler.post(ledRunnable())
-
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
+        service = PeripheralManagerService()
         try {
-            led.close()
+            i2cDevice = service.openI2cDevice(I2C_ADDRESS, TC74_TEMPERATURE_SENSOR_SLAVE)
         } catch (e: IOException) {
-            Log.e(TAG, "Error on closing GPIO", e)
+            throw IllegalStateException("$I2C_ADDRESS bus slave $TC74_TEMPERATURE_SENSOR_SLAVE connection cannot be opened.", e)
         }
+
+        while (true) {
+            val array = ByteArray(1)
+            i2cDevice.write(array, 1)
+
+            val input = ByteArray(1)
+            i2cDevice.read(input, 1)
+
+            val temperature: Int = input[0].toInt() and 0xff
+            Log.e("Sensor", "$temperature")
+
+            Thread.sleep(3000)
+        }
+
     }
 
-    private fun ledRunnable(): Runnable = Runnable {
-        try {
-            led.blink()
-            ledHandler.postDelayed(ledRunnable(), DELAY)
-        } catch (e: IOException) {
-            Log.e(TAG, "Error on peripheral", e)
-        }
-    }
 
     companion object {
         const val TAG = "BlinkLedActivity"
